@@ -1,0 +1,6 @@
+plaid-python
+flask
+pandas
+plotly
+requests
+python-dotenv
