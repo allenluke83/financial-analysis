@@ -1,7 +1,8 @@
 venv/
 .env
-token_*.txt
-*.html
 __pycache__/
 *.pyc
 .DS_Store
+finance.db
+finance.db-shm
+finance.db-wal
