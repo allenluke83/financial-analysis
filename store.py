@@ -63,6 +63,94 @@ def get_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
+
+# ---------------------------------------------------------------------------
+# Write helpers
+# ---------------------------------------------------------------------------
+ 
+def insert_transaction(conn: sqlite3.Connection, tx: dict) -> bool:
+    """
+    Insert a single transaction. Returns True if inserted, False if it already
+    existed (duplicate ext_id + source is silently ignored).
+ 
+    Expected keys in tx:
+        ext_id, source, date, amount (pence), description,
+        category (optional), is_transfer (optional), raw_json (optional)
+    """
+    sql = """
+        INSERT OR IGNORE INTO transactions
+            (ext_id, source, date, amount, description, category, is_transfer, raw_json)
+        VALUES
+            (:ext_id, :source, :date, :amount, :description,
+             :category, :is_transfer, :raw_json)
+    """
+    tx.setdefault("category", None)
+    tx.setdefault("is_transfer", 0)
+    tx.setdefault("raw_json", None)
+ 
+    cursor = conn.execute(sql, tx)
+    return cursor.rowcount == 1
+ 
+ 
+def upsert_balance(conn: sqlite3.Connection, account: str, date: str, balance_pence: int) -> None:
+    """
+    Insert or replace a balance snapshot. Safe to call repeatedly — the most
+    recent call for a given (account, date) wins.
+    """
+    conn.execute(
+        """
+        INSERT INTO balances (account, date, balance)
+        VALUES (?, ?, ?)
+        ON CONFLICT (account, date) DO UPDATE SET balance = excluded.balance
+        """,
+        (account, date, balance_pence),
+    )
+ 
+# ---------------------------------------------------------------------------
+# Read helpers
+# ---------------------------------------------------------------------------
+ 
+def get_transactions(
+    conn: sqlite3.Connection,
+    source: str = None,
+    exclude_transfers: bool = True,
+) -> list[sqlite3.Row]:
+    """
+    Fetch transactions, optionally filtered by source and with transfers excluded.
+    Returns rows ordered by date descending.
+    """
+    clauses = []
+    params: list = []
+ 
+    if source:
+        clauses.append("source = ?")
+        params.append(source)
+    if exclude_transfers:
+        clauses.append("is_transfer = 0")
+ 
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    rows = conn.execute(
+        f"SELECT * FROM transactions {where} ORDER BY date DESC", params
+    ).fetchall()
+    return rows
+ 
+ 
+def get_latest_balances(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """
+    Return the most recent balance snapshot for every account.
+    """
+    return conn.execute(
+        """
+        SELECT account, date, balance
+        FROM balances
+        WHERE (account, date) IN (
+            SELECT account, MAX(date) FROM balances GROUP BY account
+        )
+        ORDER BY account
+        """
+    ).fetchall()
+ 
+
 # ---------------------------------------------------------------------------
 # Initialisation
 # ---------------------------------------------------------------------------
