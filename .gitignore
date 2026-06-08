@@ -6,3 +6,8 @@ __pycache__/
 finance.db
 finance.db-shm
 finance.db-wal
+amex_statement/*
+!amex_statement/.gitkeep
+testing.py
+plots/*
+!plots/.gitkeep

@@ -70,13 +70,6 @@ def get_latest_monzo_ext_id():
     finally:
         conn.close()
 
-if __name__ == "__main__":
-    try:
-        refresh_monzo_tokens()
-
-    except Exception as e:
-            print(f"Failed to sync Monzo data: {e}")
-
 
 def fetch_monzo_transactions(since_id=None):
     """Fetches transactions from the Monzo API."""
@@ -101,7 +94,6 @@ def fetch_monzo_transactions(since_id=None):
         
     return response.json().get("transactions", [])
 
-
 def save_transactions_to_db(transactions):
     """Parses Monzo transactions and inserts them into the transactions table."""
     conn = sqlite3.connect(DB_PATH)
@@ -115,6 +107,7 @@ def save_transactions_to_db(transactions):
             
         ext_id = tx["id"]
         date_str = tx["created"][:10]  # Extracts YYYY-MM-DD
+        raw_category = tx["category"]
         
         # Determine the cleanest name for description
         description = tx.get("description")
@@ -146,7 +139,7 @@ def save_transactions_to_db(transactions):
                 INSERT OR IGNORE INTO transactions (ext_id, source, date, amount, description, category, is_transfer, raw_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (ext_id, "monzo", date_str, amount_pence, description, None, is_transfer, raw_json_str)
+                (ext_id, "monzo", date_str, amount_pence, description, raw_category, is_transfer, None)
             )
             if cursor.rowcount > 0:
                 inserted_count += 1
@@ -156,3 +149,13 @@ def save_transactions_to_db(transactions):
     conn.commit()
     conn.close()
     print(f"Successfully synced {inserted_count} new Monzo transactions.")
+
+# %%
+if __name__ == "__main__":
+    try:
+        refresh_monzo_tokens()
+        transactions = fetch_monzo_transactions()
+        save_transactions_to_db(transactions)
+    except Exception as e:
+            print(f"Failed to sync Monzo data: {e}")
+
